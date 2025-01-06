@@ -1,7 +1,5 @@
 name: Build and Release UnityLive2d
 
-name: Build and Release
-
 on:
   workflow_dispatch:
     inputs:
