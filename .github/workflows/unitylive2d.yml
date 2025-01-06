@@ -1,0 +1,85 @@
+name: Build and Release
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout this repository
+      uses: actions/checkout@v2
+
+    - name: Checkout target repository
+      uses: actions/checkout@v2
+      with:
+        repository: zwa73/UnityLive2DExtractor-Unofficial
+        path: target-repo
+
+    - name: Apply patches
+      run: |
+        for patch in patches/unitylive2d/*.patch; do
+          git apply --directory=target-repo "$patch"
+        done
+
+    - name: Setup MSVC
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: x64
+
+    - name: Restore NuGet packages
+      run: nuget restore target-repo/UnityLive2DExtractor.sln
+
+    - name: Build solution
+      run: msbuild target-repo/UnityLive2DExtractor.sln /p:Configuration=Release
+
+    - name: Archive build artifacts
+      uses: actions/upload-artifact@v2
+      with:
+        name: build
+        path: |
+          target-repo/**/bin/Release/
+          target-repo/**/obj/Release/
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout this repository
+      uses: actions/checkout@v2
+
+    - name: Download build artifacts
+      uses: actions/download-artifact@v2
+      with:
+        name: build
+        path: build
+
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.MALAS_TOKEN }}
+      with:
+        tag_name: ${{ github.sha }}
+        release_name: Release ${{ github.sha }}
+        body: |
+          Release build for commit ${{ github.sha }}
+        draft: false
+        prerelease: false
+
+    - name: Upload Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.MALAS_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: build
+        asset_name: build.zip
+        asset_content_type: application/zip
