@@ -1,13 +1,18 @@
 name: Build and Release UnityLive2d
 
+name: Build and Release
+
 on:
-  push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
   workflow_dispatch:
+    inputs:
+      buildType:
+        description: 'Build Configuration'
+        required: true
+        default: 'Release'
+        type: choice
+        options:
+        - Release
+        - Debug
 
 jobs:
   build:
@@ -33,21 +38,28 @@ jobs:
     - name: Setup MSVC
       uses: ilammy/msvc-dev-cmd@v1
       with:
-        arch: x64
+        arch: x86
 
     - name: Restore NuGet packages
       run: nuget restore target-repo/UnityLive2DExtractor.sln
 
     - name: Build solution
-      run: msbuild target-repo/UnityLive2DExtractor.sln /p:Configuration=Release
+      run: |
+        msbuild target-repo/UnityLive2DExtractor.sln `
+          /p:Configuration=${{ inputs.buildType }} `
+          /p:Platform="Any CPU" `
+          /p:DeployOnBuild=true `
+          /p:PublishProfile=Release `
+          /p:UseWPP_CopyWebApplication=true
 
     - name: Archive build artifacts
       uses: actions/upload-artifact@v3
       with:
-        name: build
+        name: UnityLive2DExtractor-${{ inputs.buildType }}
         path: |
-          target-repo/**/bin/Release/
-          target-repo/**/obj/Release/
+          target-repo/**/bin/${{ inputs.buildType }}/**/*
+          !**/*.pdb
+          !**/*.obj
 
   release:
     needs: build
@@ -60,8 +72,13 @@ jobs:
     - name: Download build artifacts
       uses: actions/download-artifact@v3
       with:
-        name: build
+        name: UnityLive2DExtractor-${{ inputs.buildType }}
         path: build
+
+    - name: Create zip file
+      run: |
+        cd build
+        zip -r ../UnityLive2DExtractor-${{ inputs.buildType }}.zip ./*
 
     - name: Create Release
       id: create_release
@@ -69,10 +86,11 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.MALAS_TOKEN }}
       with:
-        tag_name: ${{ github.sha }}
-        release_name: Release ${{ github.sha }}
+        tag_name: release-${{ github.sha }}
+        release_name: Release ${{ inputs.buildType }}-${{ github.sha }}
         body: |
           Release build for commit ${{ github.sha }}
+          Build Configuration: ${{ inputs.buildType }}
         draft: false
         prerelease: false
 
@@ -82,6 +100,6 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.MALAS_TOKEN }}
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: build
-        asset_name: build.zip
+        asset_path: UnityLive2DExtractor-${{ inputs.buildType }}.zip
+        asset_name: UnityLive2DExtractor-${{ inputs.buildType }}.zip
         asset_content_type: application/zip
