@@ -1,4 +1,4 @@
-name: Build and Release UnityLive2dExtract
+name: Build and Release UnityLive2d
 
 on:
   workflow_dispatch:
@@ -26,11 +26,6 @@ jobs:
         repository: zwa73/UnityLive2DExtractor-Unofficial
         path: target-repo
 
-    - name: Setup .NET 8.0
-      uses: actions/setup-dotnet@v3
-      with:
-        dotnet-version: '8.0.x'
-
     - name: Apply patches
       shell: pwsh
       run: |
@@ -38,32 +33,29 @@ jobs:
           git apply --directory=target-repo $_.FullName
         }
 
-    - name: Restore dependencies
-      run: |
-        cd target-repo
-        dotnet restore UnityLive2DExtractor.sln
+    - name: Setup MSVC
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: x86
 
-    - name: Build
-      run: |
-        cd target-repo
-        dotnet build UnityLive2DExtractor.sln --configuration ${{ inputs.buildType }} --no-restore
+    - name: Restore NuGet packages
+      run: nuget restore target-repo/UnityLive2DExtractor.sln
 
-    - name: Publish
+    - name: Build solution
       run: |
-        cd target-repo
-        dotnet publish UnityLive2DExtractor.sln --configuration ${{ inputs.buildType }} `
-          --no-build `
-          --framework net8.0 `
-          --runtime win-x64 `
-          --self-contained true `
-          --output publish
+        msbuild target-repo/UnityLive2DExtractor.sln `
+          /p:Configuration=${{ inputs.buildType }} `
+          /p:Platform="Any CPU" `
+          /p:DeployOnBuild=true `
+          /p:PublishProfile=Release `
+          /p:UseWPP_CopyWebApplication=true
 
     - name: Archive build artifacts
       uses: actions/upload-artifact@v3
       with:
-        name: UnityLive2DExtractor-${{ inputs.buildType }}-net8.0
+        name: UnityLive2DExtractor-${{ inputs.buildType }}
         path: |
-          target-repo/publish/**/*
+          target-repo/**/bin/${{ inputs.buildType }}/**/*
           !**/*.pdb
           !**/*.obj
 
@@ -72,16 +64,19 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+    - name: Checkout this repository
+      uses: actions/checkout@v3
+
     - name: Download build artifacts
       uses: actions/download-artifact@v3
       with:
-        name: UnityLive2DExtractor-${{ inputs.buildType }}-net8.0
+        name: UnityLive2DExtractor-${{ inputs.buildType }}
         path: build
 
     - name: Create zip file
       run: |
         cd build
-        zip -r ../UnityLive2DExtractor-${{ inputs.buildType }}-net8.0-win-x64.zip ./*
+        zip -r ../UnityLive2DExtractor-${{ inputs.buildType }}.zip ./*
 
     - name: Create Release
       id: create_release
@@ -89,15 +84,11 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.MALAS_TOKEN }}
       with:
-        tag_name: v${{ github.run_number }}-${{ inputs.buildType }}
-        release_name: Release ${{ inputs.buildType }}-net8.0-${{ github.run_number }}
+        tag_name: release-${{ github.sha }}
+        release_name: Release Build For ${{ inputs.buildType }}-${{ github.sha }}
         body: |
           Release build for commit ${{ github.sha }}
-          - Build Configuration: ${{ inputs.buildType }}
-          - .NET Version: 8.0
-          - Platform: win-x64
-          - Build Date: ${{ github.event.head_commit.timestamp }}
-          - Built by: ${{ github.actor }}
+          Build Configuration: ${{ inputs.buildType }}
         draft: false
         prerelease: false
 
@@ -107,6 +98,6 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.MALAS_TOKEN }}
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: UnityLive2DExtractor-${{ inputs.buildType }}-net8.0-win-x64.zip
-        asset_name: UnityLive2DExtractor-${{ inputs.buildType }}-net8.0-win-x64.zip
+        asset_path: UnityLive2DExtractor-${{ inputs.buildType }}.zip
+        asset_name: UnityLive2DExtractor-${{ inputs.buildType }}.zip
         asset_content_type: application/zip
