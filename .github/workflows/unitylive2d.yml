@@ -24,10 +24,11 @@ jobs:
         path: target-repo
 
     - name: Apply patches
+      shell: pwsh
       run: |
-        for patch in patches/unitylive2d/*.patch; do
-          git apply --directory=target-repo "$patch"
-        done
+        Get-ChildItem "patches/unitylive2d/*.patch" | ForEach-Object {
+          git apply --directory=target-repo $_.FullName
+        }
 
     - name: Setup MSVC
       uses: ilammy/msvc-dev-cmd@v1
