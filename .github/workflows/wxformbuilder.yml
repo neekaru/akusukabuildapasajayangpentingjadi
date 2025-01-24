@@ -1,23 +1,19 @@
 name: Build wxFormBuilder
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - '**'
-    tags:
-      - 'v*'
-  pull_request:
-    paths-ignore:
-      - 'docs/**'
-      - '.clang-format'
-      - '.git-blame-ignore-revs'
-      - '.git-properties'
-      - 'LICENSE'
-      - '**.md'
+    inputs:
+      build_timestamp:
+        description: 'Build Timestamp (UTC)'
+        required: true
+        default: '2025-01-24 14:12:16'
+      build_user:
+        description: 'Builder Username'
+        required: true
+        default: 'neekaru'
 
 env:
-  BUILD_TIMESTAMP: '2025-01-24 14:08:46'
-  BUILD_USER: 'neekaru'
+  BUILD_TIMESTAMP: ${{ github.event.inputs.build_timestamp }}
+  BUILD_USER: ${{ github.event.inputs.build_user }}
 
 jobs:
   package-sources:
