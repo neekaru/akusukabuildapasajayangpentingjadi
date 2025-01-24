@@ -5,7 +5,7 @@ on:
       build_timestamp:
         description: 'Build Timestamp (UTC - YYYY-MM-DD HH:MM:SS)'
         required: true
-        default: '2025-01-24 14:23:57'
+        default: '2025-01-24 14:41:20'
       build_user:
         description: 'Builder Username'
         required: true
@@ -14,12 +14,14 @@ on:
 env:
   BUILD_TIMESTAMP: ${{ github.event.inputs.build_timestamp }}
   BUILD_USER: ${{ github.event.inputs.build_user }}
-  BUILD_VERSION: snapshot-${{ github.event.inputs.build_timestamp }}
+  BUILD_VERSION: snapshot-${{ github.sha }}
 
 jobs:
-  package-sources:
-    name: Package Sources
+  source:
+    name: Package Source
     runs-on: windows-latest
+    outputs:
+      version: ${{ env.BUILD_VERSION }}
     steps:
       - uses: actions/github-script@v7.0.1
         id: variables
@@ -39,143 +41,152 @@ jobs:
           path: target-repo
           submodules: recursive
 
-      - name: Fetch tags
-        working-directory: target-repo
-        run: git fetch --prune --prune-tags --force --depth=1 --no-recurse-submodules
-
-      - uses: msys2/setup-msys2@v2.24.1
-        with:
-          msystem: mingw64
-          release: false
-          update: false
-          install: mingw-w64-x86_64-libzip git
-
       - name: Create source archive
-        shell: msys2 {0}
+        shell: cmd
         working-directory: target-repo
         run: |
-          git config --global core.autocrlf true
-          echo "Build by ${{ env.BUILD_USER }} at ${{ env.BUILD_TIMESTAMP }}" > build_info.txt
-          git archive "--output=wxFormBuilder-${{ steps.variables.outputs.result }}-source-full.zip" "--prefix=wxFormBuilder-${{ steps.variables.outputs.result }}/" HEAD
-          git submodule foreach --recursive "git archive --output=module.zip \"--prefix=wxFormBuilder-${{ steps.variables.outputs.result }}/\$displaypath/\" HEAD && zipmerge \"$PWD/wxFormBuilder-${{ steps.variables.outputs.result }}-source-full.zip\" module.zip && rm -f module.zip"
+          echo Build by ${{ env.BUILD_USER }} at ${{ env.BUILD_TIMESTAMP }} > build_info.txt
+          7z a -tzip "..\wxFormBuilder-${{ env.BUILD_VERSION }}-source.zip" * -xr!.git*
 
       - uses: actions/upload-artifact@v4.4.3
         with:
-          name: wxFormBuilder Source
-          path: target-repo/wxFormBuilder-*-source-full.zip
+          name: Source Package
+          path: wxFormBuilder-*-source.zip
 
-  build-windows:
-    name: Build Windows (${{ matrix.pkg }})
+  build-32bit:
+    needs: source
+    name: Build 32-bit
     runs-on: windows-latest
-    needs: package-sources
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { sys: mingw32, arch: i686, pkg: i686 }
-          - { sys: ucrt64, arch: x86_64, pkg: ucrt-x86_64 }
     steps:
       - name: Checkout target repository
         uses: actions/checkout@v3
         with:
           repository: wxFormBuilder/wxFormBuilder
           path: target-repo
-          fetch-tags: true
           submodules: recursive
 
       - uses: msys2/setup-msys2@v2.24.1
         with:
-          msystem: ${{ matrix.sys }}
+          msystem: mingw32
           release: false
           update: false
           install: >-
-            mingw-w64-${{ matrix.pkg }}-toolchain
-            mingw-w64-${{ matrix.pkg }}-cmake
-            mingw-w64-${{ matrix.pkg }}-make
-            mingw-w64-${{ matrix.pkg }}-wxWidgets3.2
-            mingw-w64-${{ matrix.pkg }}-boost
+            mingw-w64-i686-toolchain
+            mingw-w64-i686-cmake
+            mingw-w64-i686-make
+            mingw-w64-i686-wxWidgets3.2
+            mingw-w64-i686-boost
             base-devel
             git
-
-      - name: Configure msys2 environment
-        shell: msys2 {0}
-        working-directory: target-repo
-        run: |
-          git config --global core.autocrlf true
-          echo "project_version=`sed -n -E -e "/^project\(wxFormBuilder[[:space:]]+VERSION[[:space:]]+(.*)[[:space:]]+LANGUAGES.*$/{s//-\1/p;q}" CMakeLists.txt `" >> $GITHUB_ENV
-          echo "Build by ${{ env.BUILD_USER }} at ${{ env.BUILD_TIMESTAMP }}" > build_info.txt
-
-      - name: Create build system
-        shell: msys2 {0}
-        working-directory: target-repo
-        run: |
-          cmake -S . -B _build -G "MSYS Makefiles" --install-prefix "$PWD/_install" -DCMAKE_BUILD_TYPE=Release
 
       - name: Build
         shell: msys2 {0}
         working-directory: target-repo
         run: |
+          echo "Build by ${{ env.BUILD_USER }} at ${{ env.BUILD_TIMESTAMP }}" > build_info.txt
+          cmake -S . -B _build -G "MSYS Makefiles" --install-prefix "$PWD/_install" -DCMAKE_BUILD_TYPE=Release
           cmake --build _build --config Release -j `nproc`
-
-      - name: Test stage
-        shell: msys2 {0}
-        working-directory: target-repo
-        run: |
-          _build\\stage\\wxFormBuilder.exe -v
-          _build\\stage\\wxFormBuilder.exe -g test\\wxfbTest.fbp
-
-      - name: Install
-        shell: msys2 {0}
-        working-directory: target-repo
-        run: |
           cmake --install _build --config Release --strip
           cp build_info.txt _install/
-
-      - name: Test install
-        shell: cmd
-        working-directory: target-repo
-        run: |
-          _install\\wxFormBuilder.exe -v
-          _install\\wxFormBuilder.exe -g test\\wxfbTest.fbp
 
       - name: Create archive
         shell: cmd
         working-directory: target-repo
         run: |
           cd _install
-          7z a -tzip -bb1 "..\\wxFormBuilder${{ env.project_version }}-${{ matrix.pkg }}.zip" .
+          7z a -tzip "..\\wxFormBuilder-${{ env.BUILD_VERSION }}-win32.zip" .
 
       - name: Create installer
         shell: cmd
         working-directory: target-repo
         run: |
-          ISCC.exe /DArch=${{ matrix.arch }} /O. data\\packaging\\windows\\wxFormBuilder.iss
+          ISCC.exe /DArch=i686 /O. data\\packaging\\windows\\wxFormBuilder.iss
 
       - uses: actions/upload-artifact@v4.4.3
         with:
-          name: Windows Archive ${{ matrix.pkg }}
-          path: target-repo/wxFormBuilder-*.zip
+          name: Windows 32-bit
+          path: |
+            target-repo/wxFormBuilder-*-win32.zip
+            target-repo/wxFormBuilder-*.exe
+
+  build-64bit:
+    needs: source
+    name: Build 64-bit
+    runs-on: windows-latest
+    steps:
+      - name: Checkout target repository
+        uses: actions/checkout@v3
+        with:
+          repository: wxFormBuilder/wxFormBuilder
+          path: target-repo
+          submodules: recursive
+
+      - uses: msys2/setup-msys2@v2.24.1
+        with:
+          msystem: ucrt64
+          release: false
+          update: false
+          install: >-
+            mingw-w64-ucrt-x86_64-toolchain
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-make
+            mingw-w64-ucrt-x86_64-wxWidgets3.2
+            mingw-w64-ucrt-x86_64-boost
+            base-devel
+            git
+
+      - name: Build
+        shell: msys2 {0}
+        working-directory: target-repo
+        run: |
+          echo "Build by ${{ env.BUILD_USER }} at ${{ env.BUILD_TIMESTAMP }}" > build_info.txt
+          cmake -S . -B _build -G "MSYS Makefiles" --install-prefix "$PWD/_install" -DCMAKE_BUILD_TYPE=Release
+          cmake --build _build --config Release -j `nproc`
+          cmake --install _build --config Release --strip
+          cp build_info.txt _install/
+
+      - name: Create archive
+        shell: cmd
+        working-directory: target-repo
+        run: |
+          cd _install
+          7z a -tzip -bb1 "..\\wxFormBuilder-${{ env.BUILD_VERSION }}-win64.zip" .
+
+      - name: Create installer
+        shell: cmd
+        working-directory: target-repo
+        run: |
+          ISCC.exe /DArch=x86_64 /O. data\\packaging\\windows\\wxFormBuilder.iss
 
       - uses: actions/upload-artifact@v4.4.3
         with:
-          name: Windows Installer ${{ matrix.pkg }}
-          path: target-repo/wxFormBuilder-*.exe
+          name: Windows 64-bit
+          path: |
+            target-repo/wxFormBuilder-*-win64.zip
+            target-repo/wxFormBuilder-*.exe
+
+  release:
+    needs: [source, build-32bit, build-64bit]
+    name: Create Release
+    runs-on: windows-latest
+    steps:
+      - uses: actions/download-artifact@v4.4.3
+        with:
+          pattern: "*"
+          merge-multiple: true
 
       - name: Release
         uses: softprops/action-gh-release@v1
         with:
-          files: |
-            target-repo/wxFormBuilder-*.zip
-            target-repo/wxFormBuilder-*.exe
+          files: wxFormBuilder-*
           draft: true
-          tag_name: snapshot-${{ env.BUILD_TIMESTAMP }}
+          tag_name: snapshot.${{ env.BUILD_TIMESTAMP }}
           name: "wxFormBuilder Snapshot (Built by ${{ env.BUILD_USER }} at ${{ env.BUILD_TIMESTAMP }})"
           body: |
             Snapshot Build Information:
             - Built by: ${{ env.BUILD_USER }}
             - Build date: ${{ env.BUILD_TIMESTAMP }}
             - Build type: Release
-            - Version: ${{ env.BUILD_VERSION }}
           generate_release_notes: true
         env:
-          GITHUB_TOKEN: ${{ secrets.MALAS_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
