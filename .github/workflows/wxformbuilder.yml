@@ -175,12 +175,19 @@ jobs:
           pattern: "*"
           merge-multiple: true
 
+      - name: Generate valid tag name
+        id: tag
+        run: |
+          # Replace invalid characters in the timestamp
+          TIMESTAMP=$(echo "${{ env.BUILD_TIMESTAMP }}" | tr -cd '[:alnum:]._-' | tr ' ' '_' | tr ':' '-')
+          echo "tag_name=snapshot_wxbuilder_$TIMESTAMP" >> $GITHUB_OUTPUT
+
       - name: Release
         uses: softprops/action-gh-release@v1
         with:
           files: wxFormBuilder-*
           draft: true
-          tag_name: snapshot.${{ env.BUILD_TIMESTAMP }}
+          tag_name: ${{ steps.tag.outputs.tag_name }}
           name: "wxFormBuilder Snapshot (Built by ${{ env.BUILD_USER }} at ${{ env.BUILD_TIMESTAMP }})"
           body: |
             Snapshot Build Information:
