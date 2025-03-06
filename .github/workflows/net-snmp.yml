@@ -26,8 +26,36 @@ jobs:
 
     - name: Install winget
       uses: Cyberboss/install-winget@v1
+    
     - name: Winget test
       run: winget list --accept-source-agreements
+
+    - name: Install OpenSSL
+      shell: powershell
+      run: |
+        # Download and extract Win64 OpenSSL
+        $opensslVersion = "3.4.1"
+        $opensslDir = "C:\OpenSSL-Win64"
+        
+        # Create directory if it doesn't exist
+        New-Item -ItemType Directory -Force -Path $opensslDir
+        
+        # Download OpenSSL
+        $url = "https://slproweb.com/download/Win64OpenSSL-$opensslVersion.exe"
+        $installer = "$env:TEMP\Win64OpenSSL.exe"
+        Invoke-WebRequest -Uri $url -OutFile $installer
+        
+        # Install OpenSSL
+        Start-Process -FilePath $installer -ArgumentList "/SILENT /SP- /DIR=`"$opensslDir`"" -Wait
+        
+        # Verify installation
+        if (!(Test-Path "$opensslDir\include\openssl\ossl_typ.h")) {
+            Write-Error "OpenSSL header files not found!"
+            exit 1
+        }
+        
+        Write-Output "OpenSSL installed successfully"
+        Get-ChildItem "$opensslDir\include\openssl"
 
     - name: Setup MSVC and environment variables
       shell: cmd
@@ -37,21 +65,23 @@ jobs:
           echo "Error: MSVC vcvars64.bat not found. Visual Studio 2022 Enterprise is required."
           exit /b 1
         )
+        
+        rem Set up Visual Studio environment
         call "%VCVARSPATH%\vcvars64.bat"
-        set PATH=C:\Perl64\bin;%PATH%
-        set OPENSSLDIR=C:\OpenSSL-Win64
-        set PATH=%PATH%;C:\cygwin64\bin
-        set INCLUDE=%INCLUDE%;C:\OpenSSL-Win64\include
-        set LIB=%LIB%;C:\OpenSSL-Win64\lib;C:\OpenSSL-Win64\lib\VC
-
-    - name: Install OpenSSL dependency
-      shell: powershell
-      run: |
-        choco install openssl -y
-        Import-Module "$env:ChocolateyInstall\helpers\chocolateyProfile.psm1"
-        Update-SessionEnvironment
-        Write-Output "OpenSSL version:"
-        openssl version
+        
+        rem Set environment variables for the current session
+        set "PATH=C:\Perl64\bin;%PATH%"
+        set "PATH=%PATH%;C:\cygwin64\bin"
+        set "OPENSSLDIR=C:\OpenSSL-Win64"
+        set "INCLUDE=%INCLUDE%;C:\OpenSSL-Win64\include"
+        set "LIB=%LIB%;C:\OpenSSL-Win64\lib;C:\OpenSSL-Win64\lib\"
+        
+        rem Verify OpenSSL setup
+        dir "C:\OpenSSL-Win64\include\openssl\ossl_typ.h"
+        if %errorlevel% neq 0 (
+          echo "Error: OpenSSL headers not found!"
+          exit /b 1
+        )
 
     - name: Modify build.bat
       shell: powershell
