@@ -31,6 +31,10 @@ jobs:
         if exist "%p%" set "VCVARSPATH=%p%"
         set p=C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build
         if exist "%p%" set "VCVARSPATH=%p%"
+        if not defined VCVARSPATH (
+          echo "Error: MSVC vcvars64.bat not found."
+          exit /b 1
+        )
         call "%VCVARSPATH%\vcvars64.bat"
         set PATH=C:\Perl64\bin;%PATH%
         set OPENSSLDIR=C:\OpenSSL-Win64
