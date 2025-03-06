@@ -24,15 +24,11 @@ jobs:
         repository: net-snmp/net-snmp
         path: net-snmp
 
-    - name: Install OpenSSL dependency
-      shell: powershell
-      run: |
-        choco install openssl -y
-        Import-Module "$env:ChocolateyInstall\helpers\chocolateyProfile.psm1"
-        Update-SessionEnvironment
-        Write-Output "OpenSSL version:"
-        openssl version
-      continue-on-error: true
+    - name: Install winget
+      uses: Cyberboss/install-winget@v1
+      with:
+        GITHUB_TOKEN: ${{ secrets.MALAS_TOKEN }}
+        wget_release_id: latest
 
     - name: Setup MSVC and environment variables
       shell: cmd
@@ -48,7 +44,15 @@ jobs:
         set PATH=%PATH%;C:\cygwin64\bin
         set INCLUDE=%INCLUDE%;C:\OpenSSL-Win64\include
         set LIB=%LIB%;C:\OpenSSL-Win64\lib;C:\OpenSSL-Win64\lib\VC
-      continue-on-error: true
+
+    - name: Install OpenSSL dependency
+      shell: powershell
+      run: |
+        choco install openssl -y
+        Import-Module "$env:ChocolateyInstall\helpers\chocolateyProfile.psm1"
+        Update-SessionEnvironment
+        Write-Output "OpenSSL version:"
+        openssl version
 
     - name: Remove Strawberry Perl if exists
       shell: powershell
@@ -59,7 +63,6 @@ jobs:
         } else {
           Write-Output "No Strawberry Perl installation detected."
         }
-      continue-on-error: true
 
     - name: Install ActivePerl using winget
       shell: powershell
@@ -73,7 +76,6 @@ jobs:
         Update-SessionEnvironment
         Write-Output "Perl version:"
         perl -v
-      continue-on-error: true
 
     - name: Upload ActivePerl MSI log
       if: always()
@@ -84,8 +86,6 @@ jobs:
           Copy-Item -Path "c:\ActivePerl_msi_install.log" -Destination "artifacts\"
         } else {
           Write-Output "MSI log file not found."
-        }
-      continue-on-error: true
 
     - name: Upload log artifact
       uses: actions/upload-artifact@v4
@@ -93,7 +93,6 @@ jobs:
       with:
         name: ActivePerl_msi_log
         path: artifacts/ActivePerl_msi_install.log
-      continue-on-error: true
 
     - name: Modify build.bat
       shell: powershell
@@ -105,7 +104,6 @@ jobs:
         } else {
           Write-Output "build.bat not found."
           exit 1
-        }
 
     - name: Build net-snmp
       shell: cmd
