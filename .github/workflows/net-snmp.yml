@@ -26,14 +26,16 @@ jobs:
 
     - name: Setup MSVC and environment variables
       run: |
+        cmd /c "
         set p=C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build
         if exist "%p%" set "VCVARSPATH=%p%"
-        set p=C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary/Build
+        set p=C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build
         if exist "%p%" set "VCVARSPATH=%p%"
         call "%VCVARSPATH%\vcvars64.bat"
         set PATH=c:\perl-msvc\bin;%PATH%
         set OPENSSLDIR=C:\OpenSSL-Win64
         set PATH=%PATH%;C:\cygwin64\bin
+        "
 
     - name: Install dependencies
       run: |
