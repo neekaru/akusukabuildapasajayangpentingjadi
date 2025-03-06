@@ -28,7 +28,7 @@ jobs:
       uses: Cyberboss/install-winget@v1
     - name: Winget test
       run: winget list --accept-source-agreements
-        
+
     - name: Setup MSVC and environment variables
       shell: cmd
       run: |
