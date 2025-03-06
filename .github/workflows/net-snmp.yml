@@ -19,14 +19,14 @@ jobs:
 
     steps:
     - name: Checkout net-snmp repository
-      uses: actions/checkout@v4  # Updated to latest version
+      uses: actions/checkout@v4
       with:
         repository: net-snmp/net-snmp
         path: net-snmp
 
     - name: Setup MSVC and environment variables
+      shell: cmd  # Use cmd for this step due to vcvars64.bat
       run: |
-        cmd /c "
         set p=C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build
         if exist "%p%" set "VCVARSPATH=%p%"
         set p=C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build
@@ -35,21 +35,23 @@ jobs:
         set PATH=C:\Perl64\bin;%PATH%
         set OPENSSLDIR=C:\OpenSSL-Win64
         set PATH=%PATH%;C:\cygwin64\bin
-        "
 
     - name: Install OpenSSL dependency
       run: |
         choco install openssl -y
+        # Refresh environment to ensure OpenSSL bin is in PATH
+        refreshenv
 
     - name: Check for existing Perl installation
+      shell: powershell  # Explicitly use PowerShell
       run: |
-        if exist "C:\Perl64" (
-          echo "Existing Perl installation found at C:\Perl64. Attempting to uninstall..."
-          dir "C:\Perl64" /s
-          exit 1  # Fail the step to force review; remove this line if uninstall logic is added
-        ) else (
-          echo "No existing Perl installation detected."
-        )
+        if (Test-Path -Path "C:\Perl64") {
+          Write-Output "Existing Perl installation found at C:\Perl64. Attempting to uninstall..."
+          Get-ChildItem -Path "C:\Perl64" -Recurse
+          exit 1  # Fail the step to force review; remove if uninstall logic is added
+        } else {
+          Write-Output "No existing Perl installation detected."
+        }
 
     - name: Install ActivePerl with detailed logging
       run: |
@@ -57,14 +59,15 @@ jobs:
       continue-on-error: true  # Allow continuation to upload logs even if this fails
 
     - name: Upload ActivePerl MSI log
-      if: always()  # Ensures log is uploaded even if installation fails
+      if: always()
+      shell: powershell  # Use PowerShell for consistency
       run: |
-        mkdir -p artifacts
-        if exist "c:\ActivePerl_msi_install.log" (
-          copy c:\ActivePerl_msi_install.log artifacts\
-        ) else (
-          echo "MSI log file not found."
-        )
+        New-Item -ItemType Directory -Path "artifacts" -Force
+        if (Test-Path -Path "c:\ActivePerl_msi_install.log") {
+          Copy-Item -Path "c:\ActivePerl_msi_install.log" -Destination "artifacts\"
+        } else {
+          Write-Output "MSI log file not found."
+        }
 
     - name: Upload log artifact
       uses: actions/upload-artifact@v4
@@ -74,14 +77,16 @@ jobs:
         path: artifacts/ActivePerl_msi_install.log
 
     - name: Verify Perl installation
+      shell: cmd  # Use cmd for perl -v compatibility
       run: |
         perl -v
         if %errorlevel% neq 0 (
-          echo "Perl installation failed or not found in PATH."
+          echo Perl installation failed or not found in PATH.
           exit 1
         )
 
     - name: Build net-snmp
+      shell: cmd  # Use cmd for build.bat
       run: |
         cd net-snmp
         call ci/build.bat ${{ inputs.buildType }}
