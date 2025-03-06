@@ -63,6 +63,7 @@ jobs:
         } else {
           Write-Output "build.bat not found."
           exit 1
+        }
 
     - name: Build net-snmp
       shell: cmd
