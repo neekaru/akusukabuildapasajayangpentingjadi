@@ -53,46 +53,6 @@ jobs:
         Write-Output "OpenSSL version:"
         openssl version
 
-    - name: Remove Strawberry Perl if exists
-      shell: powershell
-      run: |
-        if (Test-Path -Path "C:\Strawberry") {
-          Write-Output "Strawberry Perl installation found at C:\Strawberry. Removing..."
-          Remove-Item -Recurse -Force "C:\Strawberry"
-        } else {
-          Write-Output "No Strawberry Perl installation detected."
-        }
-
-    - name: Install ActivePerl using winget
-      shell: powershell
-      run: |
-        winget install --id ActiveState.ActivePerl
-        if ($LASTEXITCODE -ne 0) {
-          Write-Output "ActivePerl installation failed."
-          exit $LASTEXITCODE
-        }
-        Import-Module "$env:ChocolateyInstall\helpers\chocolateyProfile.psm1"
-        Update-SessionEnvironment
-        Write-Output "Perl version:"
-        perl -v
-
-    - name: Upload ActivePerl MSI log
-      if: always()
-      shell: powershell
-      run: |
-        New-Item -ItemType Directory -Path "artifacts" -Force
-        if (Test-Path -Path "c:\ActivePerl_msi_install.log") {
-          Copy-Item -Path "c:\ActivePerl_msi_install.log" -Destination "artifacts\"
-        } else {
-          Write-Output "MSI log file not found."
-
-    - name: Upload log artifact
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: ActivePerl_msi_log
-        path: artifacts/ActivePerl_msi_install.log
-
     - name: Modify build.bat
       shell: powershell
       run: |
