@@ -34,7 +34,7 @@ jobs:
       shell: powershell
       run: |
         # Download and extract Win64 OpenSSL
-        $opensslVersion = "3.4.1"
+        $opensslVersion = "3_4_1"
         $opensslDir = "C:\OpenSSL-Win64"
         
         # Create directory if it doesn't exist
