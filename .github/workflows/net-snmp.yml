@@ -26,10 +26,9 @@ jobs:
 
     - name: Install winget
       uses: Cyberboss/install-winget@v1
-      with:
-        GITHUB_TOKEN: ${{ secrets.MALAS_TOKEN }}
-        wget_release_id: latest
-
+    - name: Winget test
+      run: winget list --accept-source-agreements
+        
     - name: Setup MSVC and environment variables
       shell: cmd
       run: |
