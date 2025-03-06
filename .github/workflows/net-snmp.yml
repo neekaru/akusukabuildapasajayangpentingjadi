@@ -9,9 +9,9 @@ on:
         default: 'Release'
         type: choice
         options:
-        - MSVCDYNAMIC64
-        - MSVCSTATIC64
-        - INSTALLER
+          - MSVCDYNAMIC64
+          - MSVCSTATIC64
+          - INSTALLER
 
 jobs:
   build:
@@ -19,7 +19,7 @@ jobs:
 
     steps:
     - name: Checkout net-snmp repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4  # Updated to latest version
       with:
         repository: net-snmp/net-snmp
         path: net-snmp
@@ -32,15 +32,54 @@ jobs:
         set p=C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build
         if exist "%p%" set "VCVARSPATH=%p%"
         call "%VCVARSPATH%\vcvars64.bat"
-        set PATH=c:\perl-msvc\bin;%PATH%
+        set PATH=C:\Perl64\bin;%PATH%
         set OPENSSLDIR=C:\OpenSSL-Win64
         set PATH=%PATH%;C:\cygwin64\bin
         "
 
-    - name: Install dependencies
+    - name: Install OpenSSL dependency
       run: |
-        choco install openssl
-        choco install activeperl --install-arguments="'/l*v c:\ActivePerl_msi_install.log'"
+        choco install openssl -y
+
+    - name: Check for existing Perl installation
+      run: |
+        if exist "C:\Perl64" (
+          echo "Existing Perl installation found at C:\Perl64. Attempting to uninstall..."
+          dir "C:\Perl64" /s
+          exit 1  # Fail the step to force review; remove this line if uninstall logic is added
+        ) else (
+          echo "No existing Perl installation detected."
+        )
+
+    - name: Install ActivePerl with detailed logging
+      run: |
+        choco install activeperl --install-arguments "'/quiet PERL_PATH=Yes PERL_EXT=Yes /l*v c:\ActivePerl_msi_install.log'" -y
+      continue-on-error: true  # Allow continuation to upload logs even if this fails
+
+    - name: Upload ActivePerl MSI log
+      if: always()  # Ensures log is uploaded even if installation fails
+      run: |
+        mkdir -p artifacts
+        if exist "c:\ActivePerl_msi_install.log" (
+          copy c:\ActivePerl_msi_install.log artifacts\
+        ) else (
+          echo "MSI log file not found."
+        )
+
+    - name: Upload log artifact
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: ActivePerl_msi_log
+        path: artifacts/ActivePerl_msi_install.log
+
+    - name: Verify Perl installation
+      run: |
+        perl -v
+        if %errorlevel% neq 0 (
+          echo "Perl installation failed or not found in PATH."
+          exit 1
+        )
 
     - name: Build net-snmp
       run: |
