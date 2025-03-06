@@ -25,7 +25,7 @@ jobs:
         path: net-snmp
 
     - name: Setup MSVC and environment variables
-      shell: cmd  # Use cmd for this step due to vcvars64.bat
+      shell: cmd  # Use cmd for vcvars64.bat
       run: |
         set p=C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build
         if exist "%p%" set "VCVARSPATH=%p%"
@@ -37,13 +37,20 @@ jobs:
         set PATH=%PATH%;C:\cygwin64\bin
 
     - name: Install OpenSSL dependency
+      shell: powershell  # Switch to PowerShell for Chocolatey commands
       run: |
+        # Install OpenSSL
         choco install openssl -y
-        # Refresh environment to ensure OpenSSL bin is in PATH
-        refreshenv
+        # Import Chocolatey profile module and refresh environment
+        Import-Module "$env:ChocolateyInstall\helpers\chocolateyProfile.psm1"
+        Update-SessionEnvironment
+        # Verify OpenSSL is in PATH
+        Write-Output "OpenSSL version:"
+        openssl version
+      continue-on-error: true
 
     - name: Check for existing Perl installation
-      shell: powershell  # Explicitly use PowerShell
+      shell: powershell
       run: |
         if (Test-Path -Path "C:\Perl64") {
           Write-Output "Existing Perl installation found at C:\Perl64. Attempting to uninstall..."
@@ -52,15 +59,21 @@ jobs:
         } else {
           Write-Output "No existing Perl installation detected."
         }
+      continue-on-error: true
 
     - name: Install ActivePerl with detailed logging
+      shell: powershell
       run: |
+        # Install ActivePerl
         choco install activeperl --install-arguments "'/quiet PERL_PATH=Yes PERL_EXT=Yes /l*v c:\ActivePerl_msi_install.log'" -y
+        # Refresh environment after installation
+        Import-Module "$env:ChocolateyInstall\helpers\chocolateyProfile.psm1"
+        Update-SessionEnvironment
       continue-on-error: true  # Allow continuation to upload logs even if this fails
 
     - name: Upload ActivePerl MSI log
       if: always()
-      shell: powershell  # Use PowerShell for consistency
+      shell: powershell
       run: |
         New-Item -ItemType Directory -Path "artifacts" -Force
         if (Test-Path -Path "c:\ActivePerl_msi_install.log") {
@@ -77,7 +90,7 @@ jobs:
         path: artifacts/ActivePerl_msi_install.log
 
     - name: Verify Perl installation
-      shell: cmd  # Use cmd for perl -v compatibility
+      shell: cmd  # Use cmd for perl -v
       run: |
         perl -v
         if %errorlevel% neq 0 (
