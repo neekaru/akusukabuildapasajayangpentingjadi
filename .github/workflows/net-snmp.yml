@@ -1,0 +1,96 @@
+name: Build and Release net-snmp
+
+on:
+  workflow_dispatch:
+    inputs:
+      buildType:
+        description: 'Build Configuration'
+        required: true
+        default: 'Release'
+        type: choice
+        options:
+        - Release
+        - Debug
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout net-snmp repository
+      uses: actions/checkout@v3
+      with:
+        repository: net-snmp/net-snmp
+        path: net-snmp
+
+    - name: Setup MSVC
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: x86
+
+    - name: Install dependencies
+      run: |
+        choco install openssl
+        choco install nuget
+
+    - name: Restore NuGet packages
+      run: nuget restore net-snmp.sln
+
+    - name: Build net-snmp with full support
+      run: |
+        msbuild net-snmp.sln `
+          /p:Configuration=${{ inputs.buildType }} `
+          /p:Platform="Any CPU" `
+          /p:SSL=true `
+          /p:IPv6=true `
+          /p:SNMP_DLL=true `
+          /p:MIBS=true
+
+    - name: Archive build artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: net-snmp-${{ inputs.buildType }}
+        path: |
+          **/bin/${{ inputs.buildType }}/**/*
+          !**/*.pdb
+          !**/*.obj
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Download build artifacts
+      uses: actions/download-artifact@v3
+      with:
+        name: net-snmp-${{ inputs.buildType }}
+        path: build
+
+    - name: Create zip file
+      run: |
+        cd build
+        zip -r ../net-snmp-${{ inputs.buildType }}.zip ./*
+
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.MALAS_TOKEN }}
+      with:
+        tag_name: release-${{ github.sha }}
+        release_name: Net-SNMP Build For ${{ inputs.buildType }}-${{ github.sha }}
+        body: |
+          Net-SNMP release build for commit ${{ github.sha }}
+          Build Configuration: ${{ inputs.buildType }}
+        draft: false
+        prerelease: false
+
+    - name: Upload Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.MALAS_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: net-snmp-${{ inputs.buildType }}.zip
+        asset_name: net-snmp-${{ inputs.buildType }}.zip
+        asset_content_type: application/zip
